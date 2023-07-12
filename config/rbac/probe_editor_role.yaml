@@ -1,0 +1,31 @@
+# permissions for end users to edit probes.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  labels:
+    app.kubernetes.io/name: clusterrole
+    app.kubernetes.io/instance: probe-editor-role
+    app.kubernetes.io/component: rbac
+    app.kubernetes.io/created-by: probe-controller
+    app.kubernetes.io/part-of: probe-controller
+    app.kubernetes.io/managed-by: kustomize
+  name: probe-editor-role
+rules:
+- apiGroups:
+  - probe.probe.k8s
+  resources:
+  - probes
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - probe.probe.k8s
+  resources:
+  - probes/status
+  verbs:
+  - get

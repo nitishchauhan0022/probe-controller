@@ -1,0 +1,12 @@
+apiVersion: probe.probe.k8s/v1alpha1
+kind: Probe
+metadata:
+  labels:
+    app.kubernetes.io/name: probe
+    app.kubernetes.io/instance: probe-sample
+    app.kubernetes.io/part-of: probe-controller
+    app.kubernetes.io/managed-by: kustomize
+    app.kubernetes.io/created-by: probe-controller
+  name: probe-sample
+spec:
+  # TODO(user): Add fields here
