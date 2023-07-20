@@ -30,19 +30,20 @@ type ProbeSpec struct {
 	Probe         corev1.Probe         `json:"probe"`
 	ContainerName string               `json:"containerName,omitempty"`
 	SlackDetails  SlackDetails         `json:"slackDetails"`
+	MaxTime       int                  `json:"maxTime"`
 }
 
 // ProbeStatus defines the observed state of Probe
 type ProbeStatus struct {
-	Status       string `json:"status"`
-	Message      string `json:"message"`
-	FailureCount int    `json:"failureCount"`
+	ProbeResult string      `json:"probeResult"`
+	Message     string      `json:"message"`
+	TimeStamp   metav1.Time `json:"TimeStamp"`
 }
 
 // slackDetails defines the slack details
 type SlackDetails struct {
-	SlackToken   ResolveFromSecret `json:"slackToken"`
-	SlackChannel string            `json:"slackChannel"`
+	SlackToken     ResolveFromSecret `json:"slackToken"`
+	SlackChannelID string            `json:"slackChannelId"`
 }
 
 // resolveFromSecret resolves the secre

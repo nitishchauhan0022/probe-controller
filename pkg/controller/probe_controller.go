@@ -19,6 +19,7 @@ package controller
 import (
 	"context"
 	"fmt"
+	"reflect"
 	"time"
 
 	probev1alpha1 "probe/api/v1alpha1"
@@ -26,6 +27,9 @@ import (
 	probemethods "probe/pkg/probeMethods"
 
 	corev1 "k8s.io/api/core/v1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/client-go/util/retry"
+
 	v1 "k8s.io/api/core/v1"
 	errors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/labels"
@@ -45,6 +49,8 @@ type ProbeReconciler struct {
 //+kubebuilder:rbac:groups=probe.probe.k8s,resources=probes,verbs=get;list;watch;create;update;patch;delete
 //+kubebuilder:rbac:groups=probe.probe.k8s,resources=probes/status,verbs=get;update;patch
 //+kubebuilder:rbac:groups=probe.probe.k8s,resources=probes/finalizers,verbs=update
+//+kubebuilder:rbac:groups=core,resources=pods,verbs=get;watch;list
+//+kubebuilder:rbac:groups=core,resources=secrets,verbs=get;watch;list
 
 func (r *ProbeReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
 
@@ -66,30 +72,42 @@ func (r *ProbeReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl
 		return ctrl.Result{}, err
 	}
 
-	if probeResult == probe.Failure {
-		probeResource.Status.FailureCount++
-
-		if probeResource.Status.FailureCount >= 5 {
-			// Send Slack notification
-			if err := probenotifier.NotifySlack(r.Client, probeResource.Namespace, probeResource.Spec.SlackDetails, "Probe failed for 5 times in a row."); err != nil {
-				klog.Errorf("Error sending Slack notification %s", err)
-				return ctrl.Result{}, err
-			}
-		}
-	} else {
-		probeResource.Status.FailureCount = 0
+	// Initialize new status for probeResource
+	newStatus := probev1alpha1.ProbeStatus{
+		ProbeResult: string(probeResult),
+		Message:     msg,
+		TimeStamp:   metav1.Now(),
 	}
 
-	// Update the status of the Probe object
-	probeResource.Status.Status = string(probeResult)
-	probeResource.Status.Message = msg
-	if err := r.Status().Update(ctx, probeResource); err != nil {
-		klog.Errorf("Error updating probe status %s", err)
-		return ctrl.Result{}, err
+	if time.Since(probeResource.Status.TimeStamp.Time) > time.Duration(probeResource.Spec.MaxTime)*time.Second {
+		//Send Slack notification
+		if err := probenotifier.NotifySlack(r.Client, probeResource.Namespace, probeResource.Spec.SlackDetails, "Probe failed for max seconds allowed."); err != nil {
+			klog.Errorf("Error sending Slack notification %s", err)
+		}
+		probeResource.Status = newStatus
+		r.UpdateProbeResourceStatus(ctx, probeResource)
+	} else {
+		if err := r.UpdateProbeResourceStatusIfChanged(ctx, probeResource, newStatus); err != nil {
+			klog.Errorf("Error updating probe status: %s", err)
+		}
 	}
 
 	// Schedule next probe after probe.Spec.Probe.PeriodSeconds
 	return ctrl.Result{RequeueAfter: RequeueAfter}, nil
+}
+
+func (r *ProbeReconciler) UpdateProbeResourceStatusIfChanged(ctx context.Context, probeResource *probev1alpha1.Probe, newStatus probev1alpha1.ProbeStatus) error {
+	if !reflect.DeepEqual(probeResource.Status.Message, newStatus.Message) || !reflect.DeepEqual(probeResource.Status.ProbeResult, newStatus.ProbeResult) {
+		probeResource.Status = newStatus
+		return r.UpdateProbeResourceStatus(ctx, probeResource)
+	}
+	return nil
+}
+
+func (r *ProbeReconciler) UpdateProbeResourceStatus(ctx context.Context, probeResource *probev1alpha1.Probe) error {
+	return retry.RetryOnConflict(retry.DefaultRetry, func() error {
+		return r.Status().Update(ctx, probeResource)
+	})
 }
 
 func (r *ProbeReconciler) ProbeResource(ctx context.Context, probeResource *probev1alpha1.ProbeSpec) (probe.Result, string, error) {

@@ -15,17 +15,17 @@ func NotifySlack(client client.Client, namespace string, slackDetails v1alpha1.S
 		return err
 	}
 
-	channel := slackDetails.SlackChannel
+	channelID := slackDetails.SlackChannelID
 	api := slack.New(token)
-	channelID, timestamp, err := api.PostMessage(
-		channel,
+	resChannel, respTimestamp, err := api.PostMessage(
+		channelID,
 		slack.MsgOptionText(message, false),
 	)
 	if err != nil {
 		return fmt.Errorf("error sending slack message: %s", err)
 	}
 
-	_ = channelID // not used, ignore
-	_ = timestamp // not used, ignore
+	_ = resChannel    // not used, ignore
+	_ = respTimestamp // not used, ignore
 	return nil
 }
